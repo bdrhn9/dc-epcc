@@ -35,19 +35,22 @@ backbone = backbones.__dict__[args.backbone](pretrained=True,input_size=input_si
 
 if(args.onevsrest):
     head = to_1vRest(args.head,backbone.embed_size,num_classes)
-elif(args.head in ['DC_EPCC']):
+elif(args.head in ['DC_EPCC','EPCC']):
     head = heads.__dict__[args.head](backbone.embed_size,num_classes,kapa=args.kapa)
 elif(args.head in ['ArcMarginProduct','AddMarginProduct','SphereProduct','Linear_FC']):
     head = heads.__dict__[args.head](backbone.embed_size,num_classes)
 else:
     raise('head is not defined')
 
-centers_reg = losses.__dict__['center_regressor'](backbone.embed_size,num_classes,mutex_label=(args.dataset in ['voc2007']))
+if(args.head in ['EPCC']):
+    centers_reg = losses.__dict__['center_regressor'](backbone.embed_size,1,mutex_label=(args.dataset in ['voc2007']))
+else:
+    centers_reg = losses.__dict__['center_regressor'](backbone.embed_size,num_classes,mutex_label=(args.dataset in ['voc2007']))
 backbone.cuda(), head.cuda(), centers_reg.cuda()
 cudnn.benchmark = True
 
 # define optimizer
-if(args.parse_epcc_params and args.head in ['DC_EPCC']):
+if(args.parse_epcc_params and args.head in ['DC_EPCC','EPCC']):
     params2optimize = [{'params':list(backbone.parameters())+head.parse_params()['w']},
                                     {'params':head.parse_params()['wabs'],'weight_decay':0.0}]
 else:
@@ -127,7 +130,7 @@ for epoch in range(start_epoch, args.epochs):
         if(args.onevsrest):
             outputs,model_loss = head(features,labels)
         else:
-            if(args.head in ['DC_EPCC']):
+            if(args.head in ['DC_EPCC','EPCC']):
                 outputs = head(features,centers)
             elif(args.head in ['ArcMarginProduct','AddMarginProduct','SphereProduct']):
                 outputs = head(features,labels)
@@ -138,7 +141,7 @@ for epoch in range(start_epoch, args.epochs):
             model_loss = criterion_model(outputs,labels)
         model_losses.update(model_loss.item(),inputs.size(0))
         
-        if(args.head in ['DC_EPCC']):
+        if(args.head in ['DC_EPCC','EPCC']):
             gama_reg_loss = head.get_gama_reg_loss()
             gama_reg_losses.update(gama_reg_loss.item(),inputs.size(0))
             # epccs' gama regularization
