@@ -11,19 +11,22 @@ First of all, create conda environment using environment.yml on CUDA-Enabled sys
 (1.) Train DC_EPCC with ResNet18 on CIFAR-10
 > python main.py --backbone resnet18 --head DC_EPCC --loss hinge_mc_v2 --kapa 1.0 --margin 1.0 --dataset cifar10
 
-(2.) Train ArcFace with ResNet50 on CIFAR-100
+(2.) Train EPCC with ResNet18 on CIFAR-100
+> python main.py --backbone resnet50 --head EPCC --loss hinge_mc_v2 --kapa 1.0 --margin 1.0 --dataset cifar100
+
+(3.) Train ArcFace with ResNet50 on CIFAR-100
 > python main.py --backbone resnet50 --head ArcMarginProduct --loss CrossEntropyLoss --dataset cifar100
 
-(3.) Train CosFace with IR-50 on FaceScrub
+(4.) Train CosFace with IR-50 on FaceScrub
 > python main.py --backbone IR_50 --head AddMarginProduct --loss CrossEntropyLoss --dataset facescrub
 
-(4.) Train SphereFace with LeNet++ on MNIST
+(5.) Train SphereFace with LeNet++ on MNIST
 > python main.py --backbone LeNet --head SphereProduct --loss CrossEntropyLoss --dataset mnist
 
-(5.) Train Softmax with ResNet50 on CIFAR-100
+(6.) Train Softmax with ResNet50 on CIFAR-100
 > python main.py --backbone resnet50 --head Linear_FC --loss CrossEntropyLoss --dataset cifar100
 
-(6.) Train CenterLoss with ResNet101 on CIFAR-10
+(7.) Train CenterLoss with ResNet101 on CIFAR-10
 > python main.py --backbone resnet101 --head Linear_FC --loss CrossEntropyLoss --dataset cifar10 --centerloss
 
 ### Training on VOC2007 dataset
