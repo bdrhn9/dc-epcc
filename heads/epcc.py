@@ -7,7 +7,7 @@ import torch.nn as nn
 from torch.nn import init
 from modules.utils import epcc_kaiming_uniform_
 
-__all__ = ['EPCC_Ext','DC_EPCC','EPCC_Ext_Inverted']
+__all__ = ['EPCC','EPCC_Ext','DC_EPCC','EPCC_Ext_Inverted']
 
 class EPCC_Ext(nn.Module):   
     def __init__(self,embed_size,kapa=0.45):
@@ -78,6 +78,39 @@ class DC_EPCC(nn.Module):
                 w_param.append(param)
         return {'w':w_param,'wabs':wabs_param}    
 
+class EPCC(nn.Module):
+    def __init__(self,embed_size,num_classes,kapa=0.45):
+        super(EPCC,self).__init__()
+        self.num_classes = num_classes
+        self.kapa = kapa
+        self.embed_size = embed_size
+        self.epccs = nn.ModuleList([EPCC_Ext(embed_size,kapa) for i in range(self.num_classes)])
+    
+    def forward(self,x,centers):
+        self.outputs = [None] * self.num_classes
+        for i, epcc in enumerate(self.epccs):
+            self.outputs[i] = epcc(x,centers)
+        self.outputs = torch.cat(self.outputs, dim=1)
+        return self.outputs
+    
+    def get_gama_reg_loss(self):
+        gama_constraints = torch.zeros(self.num_classes).cuda()
+        for i in range(self.num_classes):
+            gama_constraints[i] = (self.kapa-(-self.epccs[i].wabs.weight-self.epccs[i].w.weight.abs())).clamp(min=0).mean()
+        return gama_constraints.mean()
+    
+    def parse_params(self):
+        w_param = list()
+        wabs_param = list()
+        for name, param in self.named_parameters():
+            print(name)
+            if('wabs' in name):
+                wabs_param.append(param)
+            else:
+                w_param.append(param)
+        return {'w':w_param,'wabs':wabs_param}   
+    
+    
 class EPCC_Ext_Inverted(nn.Module):   
     def __init__(self,embed_size,num_classes=1,kapa=0.45):
         super(EPCC_Ext_Inverted,self).__init__()
