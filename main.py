@@ -18,6 +18,7 @@ import losses
 from modules.utils import AverageMeter, validate, save_checkpoint,accuracy,visualize,to_1vRest
 from modules.dataset import dataset_loader
 from options import get_options
+from losses.center_reg import compute_center_loss,get_center_delta
 args = get_options()
 
 if(os.path.isdir(args.resume)):
@@ -42,11 +43,7 @@ elif(args.head in ['ArcMarginProduct','AddMarginProduct','SphereProduct','Linear
 else:
     raise('head is not defined')
 
-if(args.head in ['EPCC']):
-    centers_reg = losses.__dict__['center_regressor'](backbone.embed_size,1,mutex_label=(args.dataset in ['voc2007']))
-else:
-    centers_reg = losses.__dict__['center_regressor'](backbone.embed_size,num_classes,mutex_label=(args.dataset in ['voc2007']))
-backbone.cuda(), head.cuda(), centers_reg.cuda()
+backbone.cuda(), head.cuda()
 cudnn.benchmark = True
 
 # define optimizer
@@ -67,20 +64,20 @@ elif(args.optimizer=='Adam'):
 else:
     raise('optimizer is not defined')
 
-optimizer_centers_reg = torch.optim.SGD(centers_reg.parameters(),
-                                     lr=0.5)
 lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer_model,
                                                     milestones=[int(args.epochs*0.6),int(args.epochs*0.8)])
 # optionally resume from a checkpoint
+#args.resume = "/home/bdrhn9/workspace_ml/dc-epcc/logs/SGD/cifar100/resnet50_DC_EPCC/hinge_mc_v2/exp3/"
+
 if(os.path.isdir(args.resume)):
     checkpoint_path = os.path.join(args.resume,'best_checkpoint.pth')      
     print("=> loading checkpoint '{}'".format(checkpoint_path))
     checkpoint = torch.load(checkpoint_path)
     head.load_state_dict(checkpoint['head_state_dict'])
     backbone.load_state_dict(checkpoint['backbone_state_dict'])
-    centers_reg.load_state_dict(checkpoint['centers_reg_state_dict'])
-    optimizer_model.load_state_dict(checkpoint['optimizer_model_state_dict'])
-    optimizer_centers_reg.load_state_dict(checkpoint['optimizer_centers_reg_state_dict'])
+    # centers_reg.load_state_dict(checkpoint['centers_reg_state_dict'])
+    # optimizer_model.load_state_dict(checkpoint['optimizer_model_state_dict'])
+    # optimizer_centers_reg.load_state_dict(checkpoint['optimizer_centers_reg_state_dict'])
     best_val_top1 = checkpoint['best_val_top1']
     start_epoch = checkpoint['start_epoch']
     global_step = checkpoint['global_step']
@@ -118,6 +115,7 @@ for epoch in range(start_epoch, args.epochs):
     # switch to train mode
     backbone.train(), head.train()
     end = time.time()
+    epoch_time = time.time()
     for batch_id, (inputs, labels) in enumerate(train_loader):
        # measure data loading time
         inputs = inputs.cuda()
@@ -125,13 +123,13 @@ for epoch in range(start_epoch, args.epochs):
 
         # compute output
         features = backbone(inputs)
-        centers = centers_reg.centers
+        # centers = centers_reg.centers
         
         if(args.onevsrest):
             outputs,model_loss = head(features,labels)
         else:
             if(args.head in ['DC_EPCC','EPCC']):
-                outputs = head(features,centers)
+                outputs = head(features)
             elif(args.head in ['ArcMarginProduct','AddMarginProduct','SphereProduct']):
                 outputs = head(features,labels)
             elif(args.head in ['Linear_FC']):
@@ -149,7 +147,8 @@ for epoch in range(start_epoch, args.epochs):
                 model_loss = model_loss + gama_reg_loss
 
         # center regularization
-        center_reg_loss = centers_reg(features,labels)
+        # center_reg_loss = centers_reg(features,labels)
+        center_reg_loss = compute_center_loss(features,head.centers,labels)
         center_reg_losses.update(center_reg_loss.item(),inputs.size(0))
         
         # map feature embeddings like in center loss or nah
@@ -163,15 +162,14 @@ for epoch in range(start_epoch, args.epochs):
                 param.grad.data *= (1. / 0.003)
             optimizer_centers_reg.step()
         else:
-            optimizer_centers_reg.zero_grad()
+    
             optimizer_model.zero_grad()
-            model_loss.backward(retain_graph=True)
+            model_loss.backward()
             optimizer_model.step()
-            
-            optimizer_centers_reg.zero_grad()
-            optimizer_model.zero_grad()
-            center_reg_loss.backward()
-            optimizer_centers_reg.step()
+            center_deltas = get_center_delta(
+                    features.data, head.centers, labels, 0.5,torch.device('cuda'))
+            head.centers = head.centers - center_deltas
+        
             
         # measure accuracy and record loss
         if(not args.onevsrest):
@@ -202,7 +200,7 @@ for epoch in range(start_epoch, args.epochs):
             writer.add_scalar('train/center_reg', center_reg_losses.val,global_step)
             writer.add_scalar('train/gama_reg', gama_reg_losses.val,global_step)
         global_step+=1
-        
+    print("Elapsed time for epoch %d, %.3f"%(epoch,time.time()-epoch_time))
     lr_scheduler.step()
     
     if(args.vis2d):
@@ -211,7 +209,7 @@ for epoch in range(start_epoch, args.epochs):
         visualize(all_features, all_labels, num_classes,epoch, writer, args.head)
     
     # evaluate on validation set
-    val_top1, val_classbased_ap, val_losses, val_features, val_labels, val_outputs = validate(val_loader, backbone, head,centers, criterion_model,args)
+    val_top1, val_classbased_ap, val_losses, val_features, val_labels, val_outputs = validate(val_loader, backbone, head,head.centers, criterion_model,args)
     writer.add_scalar('test/model_loss',val_losses.avg,global_step)
     writer.add_scalar('test/accuracy',val_top1.avg,global_step)
     # remember best prec@1 and save checkpoint
@@ -221,9 +219,9 @@ for epoch in range(start_epoch, args.epochs):
     
     save_state = {  'head_state_dict': head.state_dict(),
                     'backbone_state_dict': backbone.state_dict(),
-                    'centers_reg_state_dict': centers_reg.state_dict(),
+                    # 'centers_reg_state_dict': centers_reg.state_dict(),
                     'optimizer_model_state_dict': optimizer_model.state_dict(),
-                    'optimizer_centers_reg_state_dict': optimizer_centers_reg.state_dict(),
+                    # 'optimizer_centers_reg_state_dict': optimizer_centers_reg.state_dict(),
                     'best_val_top1': best_val_top1,
                     'val_top1': val_top1.avg,
                     'val_classbased_ap':val_classbased_ap,

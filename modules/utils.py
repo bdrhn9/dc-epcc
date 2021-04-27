@@ -127,7 +127,7 @@ def validate(val_loader, backbone, head,centers, criterion_model , args):
                     outputs,loss = head(features,labels)
             else:
                 if(args.head in ['DC_EPCC','EPCC']):
-                    outputs = head(features,centers)
+                    outputs = head(features)
                 elif(args.head in ['ArcMarginProduct','AddMarginProduct','SphereProduct']):
                     outputs = head(features,labels)
                 elif(args.head in ['Linear_FC']):

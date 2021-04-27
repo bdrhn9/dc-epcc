@@ -47,11 +47,13 @@ class DC_EPCC(nn.Module):
         self.kapa = kapa
         self.embed_size = embed_size
         self.epccs = nn.ModuleList([EPCC_Ext(embed_size,kapa) for i in range(self.num_classes)])
-    
-    def forward(self,x,centers):
+        self.register_buffer('centers', (
+                torch.rand(num_classes, embed_size) - 0.5) * 2)
+        
+    def forward(self,x):
         self.outputs = [None] * self.num_classes
         for i, epcc in enumerate(self.epccs):
-            self.outputs[i] = epcc(x,centers[i])
+            self.outputs[i] = epcc(x,self.centers[i])
         self.outputs = torch.cat(self.outputs, dim=1)
         return self.outputs
     
