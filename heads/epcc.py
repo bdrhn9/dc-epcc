@@ -40,9 +40,9 @@ class EPCC_Ext(nn.Module):
                 w_param.append(param)
         return {'w':w_param,'wabs':wabs_param}
     
-class DC_EPCC(nn.Module):
+class DC_EPCC_Old(nn.Module):
     def __init__(self,embed_size,num_classes,kapa=0.45):
-        super(DC_EPCC,self).__init__()
+        super(DC_EPCC_Old,self).__init__()
         self.num_classes = num_classes
         self.kapa = kapa
         self.embed_size = embed_size
@@ -79,6 +79,49 @@ class DC_EPCC(nn.Module):
             else:
                 w_param.append(param)
         return {'w':w_param,'wabs':wabs_param}    
+
+class DC_EPCC(nn.Module):
+    def __init__(self,embed_size,num_classes,kapa=0.45):
+        super(DC_EPCC,self).__init__()
+        self.num_classes = num_classes
+        self.kapa = kapa
+        self.embed_size = embed_size
+        self.register_buffer('centers', (
+                torch.rand(num_classes, embed_size) - 0.5) * 2)
+        self.w = nn.Linear(self.embed_size,self.num_classes,bias=False)
+        # wabs is indicated as gama in paper
+        self.wabs = nn.Linear(self.embed_size,self.num_classes,bias=False)
+        self.bias = nn.Parameter(torch.Tensor(self.num_classes))
+        init.uniform_(self.bias, 0.0, 1.0)
+    def forward(self,x):
+        xc = x.unsqueeze(1)-self.centers
+        y = torch.diagonal(self.w(xc) + self.wabs(xc.abs()),dim1=-2,dim2=-1)  
+        y += self.bias.clamp(min=0.0)
+        return y
+    
+    # def get_gama_reg_loss(self):
+    #     gama_constraints = torch.zeros(self.num_classes).cuda()
+    #     for i, epcc in enumerate(self.epccs):
+    #         gama_constraints[i] = epcc.get_gama_reg_loss()
+    #     return gama_constraints.mean()
+    
+    def get_gama_reg_loss(self):
+        # gama_constraints = torch.zeros(self.num_classes).cuda()
+        # for i in range(self.num_classes):
+        #     gama_constraints[i] = (self.kapa-(-self.wabs.weight[i]-self.w.weight[i].abs())).clamp(min=0).mean()
+        return (self.kapa-(-self.wabs.weight-self.w.weight.abs())).clamp(min=0).mean()
+    
+    def parse_params(self):
+        w_param = list()
+        wabs_param = list()
+        for name, param in self.named_parameters():
+            print(name)
+            if('wabs' in name):
+                wabs_param.append(param)
+            else:
+                w_param.append(param)
+        return {'w':w_param,'wabs':wabs_param}    
+
 
 class EPCC(nn.Module):
     def __init__(self,embed_size,num_classes,kapa=0.45):
