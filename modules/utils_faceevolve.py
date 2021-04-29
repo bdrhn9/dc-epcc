@@ -128,7 +128,7 @@ hflip = transforms.Compose([
             transforms.ToPILImage(),
             transforms.functional.hflip,
             transforms.ToTensor(),
-            transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])
+            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
         ])
 
 
@@ -146,7 +146,7 @@ ccrop = transforms.Compose([
             transforms.Resize([128, 128]),  # smaller side resized
             transforms.CenterCrop([112, 112]),
             transforms.ToTensor(),
-            transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])
+            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
         ])
 
 
