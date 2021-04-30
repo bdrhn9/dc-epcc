@@ -36,12 +36,12 @@ def get_options():
     parser.add_argument('--margin', default=1.0, type=float, metavar='margin for hinge loss',
                         help='margin')
     
-    parser.add_argument('-d', '--dataset', default='cifar10', type=str)
-    parser.add_argument('-b', '--batch-size', default=128, type=int,
+    parser.add_argument('-d', '--dataset', default='casiaweb', type=str)
+    parser.add_argument('-b', '--batch-size', default=64, type=int,
                         metavar='N', help='mini-batch size (default: 128)')
-    parser.add_argument('-j', '--workers', default=4, type=int, metavar='N',
+    parser.add_argument('-j', '--workers', default=8, type=int, metavar='N',
                         help='number of data loading workers (default: 4)')
-    parser.add_argument('--epochs', default=300, type=int, metavar='N',
+    parser.add_argument('--epochs', default=500, type=int, metavar='N',
                         help='number of total epochs to run')
     parser.add_argument('--print-freq', '-p', default=100, type=int,
                         metavar='N', help='print frequency (default: 20)')

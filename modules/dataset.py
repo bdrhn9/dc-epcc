@@ -6,6 +6,7 @@ import torchvision.transforms as transforms
 import numpy as np
 from torch.utils.data import DataLoader,Subset
 from modules.voc import Voc2007Classification
+from modules.utils_faceevolve import separate_irse_bn_paras, perform_val, get_val_pair,make_weights_for_balanced_classes
 
 def dataset_loader(batch_size, num_workers, dataset = 'cifar10',selected_cls_for_binary=2):
     print('current dataset: %s'%(dataset))
@@ -223,6 +224,22 @@ def dataset_loader(batch_size, num_workers, dataset = 'cifar10',selected_cls_for
         classes = dataset_train.classes
         num_classes = len(classes)  
     
+    elif dataset =='casiaweb':
+        input_size = 112
+        normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                         std=[0.229, 0.224, 0.225])
+        train_transform = transforms.Compose([transforms.Resize((128,128)),
+                                              transforms.RandomCrop((112,112)),
+                                              transforms.RandomHorizontalFlip(),
+                                              transforms.ToTensor(),
+                                              normalize])
+
+        dataset_train = datasets.ImageFolder('/home/mlcv/bdrhn9_ws/datasets/casia_511',train_transform)
+        dataset_test = None
+        classes = dataset_train.classes
+        num_classes = len(classes) 
+
+
     elif dataset =='voc2007':
         input_size = 224
         normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
@@ -242,11 +259,20 @@ def dataset_loader(batch_size, num_workers, dataset = 'cifar10',selected_cls_for
     else:
         raise('unknown_dataset')
     
-    train_loader = DataLoader(dataset_train,
-    batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=True)
-
-    test_loader = DataLoader(dataset_test,
-    batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=True)
+    if dataset=='casiaweb':
+        weights = make_weights_for_balanced_classes(dataset_train.imgs, len(dataset_train.classes))
+        weights = torch.DoubleTensor(weights)
+        train_sampler = torch.utils.data.sampler.WeightedRandomSampler(weights, len(weights))
+        train_loader = DataLoader(dataset_train,sampler=train_sampler,
+        batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=True)
+    else:
+        train_loader = DataLoader(dataset_train,
+        batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=True)
+    if dataset_test:
+        test_loader = DataLoader(dataset_test,
+        batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=True)
+    else:
+        test_loader = None
     return classes, num_classes, input_size, train_loader, test_loader
 
 if __name__ =='__main__':
