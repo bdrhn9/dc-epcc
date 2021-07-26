@@ -17,6 +17,48 @@ from modules.vis_decision_regions import plot_decision_regions_epcc,plot_decisio
 import heads
 import losses
 
+def accuracy_l2(features,centers,targets):
+    """Computes the accuracy over the k top predictions for the specified values of k"""
+    with torch.no_grad():
+        # features are expected in (batch_size,feat_dim)
+        # centers are expected in shape (num_classes,feat_dim)
+        batch_size = targets.size(0)
+        num_classes, feat_dim = centers.shape
+        num_centers = num_classes
+        
+        serialized_centers = centers.view(-1,feat_dim)
+        assert num_centers == serialized_centers.size(0)
+
+        distmat = torch.pow(features, 2).sum(dim=1, keepdim=True).expand(batch_size, num_centers) + \
+                  torch.pow(serialized_centers, 2).sum(dim=1, keepdim=True).expand(num_centers, batch_size).t()
+        distmat.addmm_(features, serialized_centers.t(),beta=1,alpha=-2)
+        # distmat in shape (batch_size,num_centers)
+        pred = distmat.argmin(1)
+        correct = pred.eq(targets)
+
+        correct_k = correct.flatten().sum(dtype=torch.float32)
+        return correct_k * (100.0 / batch_size) 
+
+def get_l2_pred(features,centers):
+    """Computes the accuracy over the k top predictions for the specified values of k"""
+    with torch.no_grad():
+        # features are expected in (batch_size,feat_dim)
+        # centers are expected in shape (num_classes,feat_dim)
+        batch_size = features.size(0)
+        num_classes, feat_dim = centers.shape
+        num_centers = num_classes
+        
+        serialized_centers = centers.view(-1,feat_dim)
+        assert num_centers == serialized_centers.size(0)
+
+        distmat = torch.pow(features, 2).sum(dim=1, keepdim=True).expand(batch_size, num_centers) + \
+                  torch.pow(serialized_centers, 2).sum(dim=1, keepdim=True).expand(num_centers, batch_size).t()
+        distmat.addmm_(features, serialized_centers.t(),beta=1,alpha=-2)
+        # distmat in shape (batch_size,num_centers)
+        pred = distmat.argmin(1)
+
+        return pred
+
 def epcc_kaiming_uniform_(tensor, a=0, mode='fan_in', nonlinearity='leaky_relu'):
     r"""Fills the input `Tensor` with values according to the method
     described in `Delving deep into rectifiers: Surpassing human-level
@@ -166,6 +208,51 @@ def validate(val_loader, backbone, head,centers, criterion_model , args):
         top1.avg = prec1
         classbased_ap = average_precision_score(val_labels,val_outputs,average=None)
     return top1, classbased_ap, losses, val_features, val_labels, val_outputs
+
+def validate_one_class(val_loader, backbone,centers_reg, args):
+    """
+    Run evaluation
+    """
+    batch_time = AverageMeter()
+    losses = AverageMeter()
+    top1 = AverageMeter()
+
+    # switch to evaluate mode
+    backbone.eval()
+    centers_reg.eval()
+    centers = centers_reg.centers
+    all_features, all_labels, all_outputs = [], [], []
+    end = time.time()
+    with torch.no_grad():
+        for i, (inputs, labels) in enumerate(val_loader):
+            inputs = inputs.cuda()
+            labels = labels.cuda()
+            all_labels.append(labels.data.cpu().numpy())
+
+            # compute output
+            features = backbone(inputs)
+            loss = centers_reg(features,labels)
+            losses.update(loss.item(), inputs.size(0))
+
+            all_features.append(features.data.cpu().numpy())
+            all_outputs.append(outputs.data.cpu().numpy())
+            prec1 = accuracy_l2(features,centers,labels)
+            top1.update(prec1, inputs.size(0))
+
+
+            # measure elapsed time
+            batch_time.update(time.time() - end)
+            end = time.time()
+
+            if i % args.print_freq == 0:
+                print('Test: [{0}/{1}]\t'
+                      'Time {batch_time.val:.3f} '
+                      'Loss {loss.val:.4f} ({loss.avg:.4f}) '
+                      'Prec@1 {top1.val:.3f} ({top1.avg:.3f})'.format(
+                          i, len(val_loader), batch_time=batch_time, loss=losses,
+                          top1=top1))
+   
+    return top1, losses
 
 def plot_dec_boundary_2d(feats,labels,head,centers,save_path,binary,only_feats=False):
     plt.clf()
